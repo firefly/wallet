@@ -1,18 +1,41 @@
 Firefly Wallet
 ==============
 
-Coming soon. We are putting this repository up now so you can more
-easily use the GitHub **watch** feature to get notified when there
-are changes.
+Weclome to the Firefly DIY Air-gapped Hardware Wallet project.
+
+There are still a few things we are working on, but we wanted to start
+getting some files into the hands of eager developers.
+
+Also, if you haven't seen it already, please check out our
+[crowdsale](https://ethers.io/#!/app-link/contribute.firefly.city). By contributing
+to the project, you get your very own yourNameHere.firefly.eth ENS name on the
+Ethereum network and you help fund development of the Firefly.
 
 
-This repository will soon contain (in order of release):
+Folders
+-------
 
-- Initial 3D printable case; this is done and just needs to be uploaded
-- Wiring diagram for the Firefly on a Breadboard or general routing
-- Source code for Arduino for the hardware wallet
-- Better 3D printed case; still being designed, but easier to wire
-- Printed Circuit Board (PCB) layout for more advanced, but tinier devices
+### Cases
+
+Currently limited to 3D printable cases, but we would love to have other
+creative people out there contribute interesting designs.
+
+A better 3D printable case will be published soon, but for the impatient,
+the prototype case is available.
+
+
+### Diagrams
+
+Images and source files used to build documentation.
+
+
+Future
+------
+
+- Wiring diagram for the Firefly on a Breadboard or general routing (soon)
+- Source code for Arduino for the hardware wallet (soon)
+- Better 3D printed case; still being designed, but easier to wire (soonish)
+- Printed Circuit Board (PCB) layout for more advanced, but tinier devices (future)
 
 
 License
