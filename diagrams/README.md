@@ -14,15 +14,16 @@ Schematic
 The schematic here is a simple overview of the connections required between
 the various components.
 
-This is the first time I have ever used [kicad](http://kicad-pcb.org), so it isn't
-all that pretty. I fully welcome anyone with more talent to improve it.
+This schematic diagram can be opened and modified using [kicad](http://kicad-pcb.org).
 
 
 Breadboard
 ----------
 
-Coming soon; a simple diagram showing how to easily test out your Firefly DIY kit
-using a solderless breadboard.
+The breadboard diagram is useful for quickly prototyping the Firefly wallet and
+verify components are working coreectly.
+
+The breadboard diagram can be opened and modified using [Fritzing](http://fritzing.org).
 
 
 License
