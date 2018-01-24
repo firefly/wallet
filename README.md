@@ -26,14 +26,18 @@ the prototype case is available.
 
 ### Diagrams
 
-Images and source files used to build documentation.
+Images and source files used to build documentation. Currently we have a circuit schematic
+and a breadboard layout for prototyping.
+
+
+### Source
+
+The Arduino sketch and required (modified) libraries.
 
 
 Future
 ------
 
-- Wiring diagram for the Firefly on a Breadboard or general routing (soon)
-- Source code for Arduino for the hardware wallet (soon)
 - Better 3D printed case; still being designed, but easier to wire (soonish)
 - Printed Circuit Board (PCB) layout for more advanced, but tinier devices (future)
 
@@ -41,4 +45,4 @@ Future
 License
 -------
 
-MIT license.
+MIT and BSD license. Each file includes license information at the top.
