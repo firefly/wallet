@@ -73,6 +73,7 @@ void display_hourglass(uint8_t address);
 
 // Displays a transaction, with the address above the value
 void display_transaction(uint8_t address, Transaction *transaction, char *value);
+void display_contract_transaction(uint8_t address, Transaction *transaction);
 
 void display_message(uint8_t address, bool binary, const uint8_t *message, uint8_t length);
 

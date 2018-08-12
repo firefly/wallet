@@ -96,7 +96,7 @@ static const uint8_t privateKey[] = {
 // For debugging, we want to enable Serial dumping, but in the final product
 // removing the Serial printing squeaks in a bit more room for larger transactions
 // received over BLECast.
-#define DEBUG_SERIAL  0
+#define DEBUG_SERIAL  1
 
 
 // The Ethereum library (signing, parsing transactions and cryptographic hashes)
@@ -117,6 +117,7 @@ typedef enum ErrorCode {
     ErrorCodeOutOfMemory    = 31,
     ErrorCodeSigningError   = 41,
     ErrorCodeInvalidKey     = 42,
+    ErrorBadTransaction     = 43,
     ErrorCodeStorageFailed  = 51,
 } ErrorCode;
 
@@ -181,7 +182,7 @@ int freeMemory() {
  *  Our Hardware Configuration
  */
  
-#define BUTTON_PIN            (2)
+#define BUTTON_PIN            (3)
 
 // ATmega 328
 #define RADIO_PIN_CE          (9)
@@ -208,6 +209,17 @@ static void dumpBuffer(uint8_t *buffer, uint16_t length) {
 #endif
 }
 
+static void waitForButton() {
+    // Wait for the button down
+    while (digitalRead(BUTTON_PIN) == 1) { delay(50); }
+    
+    // De-bounce
+    delay(50);
+    
+    // wait for the button up
+    while (digitalRead(BUTTON_PIN) == 0) { delay(50); }
+}
+
 void dumpFreeMemory() {
 #if DEBUG_SERIAL == 1
     display_debug_char(DISPLAY_ADDRESS, 'M');
@@ -229,6 +241,11 @@ static char getHexNibble(uint8_t value) {
 
 // If something goes wrong, indicate the error code and halt
 static void crash(ErrorCode errorCode, uint16_t lineNo) {
+    if (DEBUG_SERIAL) {
+        Serial.println("ERROR");
+        Serial.println(errorCode);
+        Serial.println(lineNo);
+    }
     if (errorCode != ErrorCodeNone) {
         display_invert(DISPLAY_ADDRESS, true);
         display_clear(DISPLAY_ADDRESS);
@@ -393,7 +410,7 @@ static void waitForTransaction(uint8_t unsignedTransactionHash[32]) {
 
 #if DEBUG_SERIAL == 1
     // The Serial library takes up extra space (buffers, etc), so we cannot have as large a message
-    const uint16_t messageDataSize = 256;
+    const uint16_t messageDataSize = 356;
 #else
     // 780 will hold 60 payloads (12 bytes data + 1 byte marker) for a total payload of 720 bytes
     const uint16_t messageDataSize = 780;
@@ -415,7 +432,7 @@ static void waitForTransaction(uint8_t unsignedTransactionHash[32]) {
     while (true) {
 
         // Long-hold Button? Trigger pairing screen
-        if (digitalRead(BUTTON_PIN)) {
+        if (digitalRead(BUTTON_PIN) == 0) {
              if (buttonOn == 0) {
                  display_invert(DISPLAY_ADDRESS, true);
              } else if (buttonOn > (SHOW_PAIRIING_SCREEN_DURATION + 49) / 50) {
@@ -440,7 +457,7 @@ static void waitForTransaction(uint8_t unsignedTransactionHash[32]) {
 
         // Check if this message is a valid transaction
         bool isValidTransaction = false;
-        if (message.data[0] == 0x00) {
+        if (message.data[0] == 0x00 || message.data[0] == 0x04) {
             isValidTransaction = ethers_decodeTransaction(&transaction, &message.data[1], message.size - 1);
         }
 
@@ -450,15 +467,29 @@ static void waitForTransaction(uint8_t unsignedTransactionHash[32]) {
             // First compute the hash, so we can clobber the data portion of the transaction (to use as the value string)
             ethers_keccak256(&message.data[1], message.size - 1, unsignedTransactionHash);
 
-            // Hijack the data space to convert the value into a base-10 string (show up to 5 decimal places)
-            ethers_toString(transaction.value, transaction.valueLength, (18 - 5), (char*)transaction.data);
+            if (message.data[0] == 0x00) {
+                // Hijack the data space to convert the value into a base-10 string (show up to 5 decimal places)
+                ethers_toString(transaction.value, transaction.valueLength, (18 - 5), (char*)transaction.data);            
+                display_transaction(DISPLAY_ADDRESS, &transaction, (char*)transaction.data);
+
+            } else if (message.data[0] == 0x04 && transaction.dataLength == 100) {
+                 // @TODO: Check sighash, make sure top address bytes are 0
+                Serial.println("HERE");
+                // Hijack the nonce in the data to convert the value into a base-10 string (show up to 5 decimal places)
+                ethers_toString(&transaction.data[36], 32, (18 - 5), (char*)&transaction.data[68]);
+                Serial.println((char*)&transaction.data[68]);
+                display_contract_transaction(DISPLAY_ADDRESS, &transaction);
+              
+            } else {
+                crash(ErrorBadTransaction, __LINE__);
+            }
             
-            display_transaction(DISPLAY_ADDRESS, &transaction, (char*)transaction.data);
+            
             
             break;
 
         // Valid message for signing
-        } else if ((message.data[0] == 0x01 && message.size <= (128 + 1)) || (message.data[0] == 0x02 && message.size <= (48 + 1))) {
+        } else if (message.size > 0 && ((message.data[0] == 0x01 && message.size <= (128 + 1)) || (message.data[0] == 0x02 && message.size <= (48 + 1)))) {
 
             uint8_t *messageData = (&message.data[1]);
             uint8_t messageLength = message.size - 1;
@@ -577,17 +608,6 @@ static void signAndShowTransaction(uint8_t *unsignedTransactionHash) {
     showSignedTransaction(signature);
 }
 
-static void waitForButton() {
-    // Wait for the button down
-    while (!digitalRead(BUTTON_PIN)) { delay(50); }
-    
-    // De-bounce
-    delay(50);
-    
-    // wait for the button up
-    while (digitalRead(BUTTON_PIN)) { delay(50); }
-}
-
 // Execution begins here
 void setup() {
   
@@ -596,6 +616,11 @@ void setup() {
     while (!Serial) { }
 #endif
 
+    pinMode(BUTTON_PIN, INPUT_PULLUP);
+
+    pinMode(RADIO_PIN_CSN, OUTPUT);
+    pinMode(RADIO_PIN_CE, OUTPUT);
+    
     // Make sure we have cached things that take a while to compute
     generateCache();
 

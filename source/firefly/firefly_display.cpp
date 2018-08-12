@@ -234,7 +234,7 @@ static void display_begin(DisplayContext *context, uint8_t address, uint8_t dim)
 }
 
 // This should be called against the same DisplayContext 16 times in a row
-static void display_chunk(DisplayContext *context, uint8_t data) {
+static uint16_t display_chunk(DisplayContext *context, uint8_t data) {
     if (context->length == 0) {
         i2c_begin(context);        
         i2c_push(context, 0x40);
@@ -246,10 +246,14 @@ static void display_chunk(DisplayContext *context, uint8_t data) {
         i2c_flush(context);
         i2c_begin(context);        
     }
+    
+    return 1;
 }
 
-static void display_chunks(DisplayContext *context, uint8_t data, uint16_t count) {
-    while (count-- != 0) { display_chunk(context, data); }
+static uint8_t display_chunks(DisplayContext *context, uint8_t data, uint16_t count) {
+    uint16_t result = 0;
+    while (count-- != 0) { result += display_chunk(context, data); }
+    return result;
 }
 
 static void display_bigChar(DisplayContext *context, uint8_t charIndex, bool topAlign, bool topHalf) {
@@ -282,11 +286,16 @@ static void display_smallChar(DisplayContext *context, uint8_t charIndex) {
     }
 }
 
-static void display_tinyChar(DisplayContext *context, uint8_t charIndex) {
+static uint8_t get_char_bit(uint8_t glyphIndex, uint8_t x, uint8_t y) {
+    uint16_t index = ((uint16_t)glyphIndex) * 35 + ((uint16_t)y) * 5 + ((uint16_t)x);
+    return (pgm_read_byte(&font_5x7[index >> 3])) & (0x80 >> (index & 0x07)) ? 1: 0;
+}
+
+static uint8_t display_char(DisplayContext *context, uint8_t charIndex) {
     // Space
     if (charIndex == 32) {
-        display_chunks(context, 0, 3);
-        return;
+        display_chunks(context, 0, 5);
+        return 5;
     }
 
     if (charIndex == 10 || charIndex == 13) {
@@ -294,37 +303,22 @@ static void display_tinyChar(DisplayContext *context, uint8_t charIndex) {
         charIndex = 127;
     } else if (charIndex < 32 || charIndex > 126) {
         // Non-printable character; solid box
-        display_chunks(context, (31 << 1), 3);
-        return;
+        display_chunks(context, (31 << 1), 5);
+        return 5;
     }
-
 
     // We have a glyph, so adjust to our font table
     charIndex -= 33;
-    
-    uint32_t tinyChar = 0;
-    uint16_t startBitIndex = charIndex * 15;
-    for (uint8_t i = 0; i < 3; i++) {
-        tinyChar <<= 8;
-        tinyChar |= pgm_read_byte(&font_tiny[(startBitIndex >> 3) + i]);
-    }
 
-    tinyChar >>= (9 - (startBitIndex % 8));
-    
-    for (int8_t c = 0; c < 15; c += 5) {
-        uint8_t chunk = ((tinyChar >> c) << 1) & 0x3e;
-        
-        // Add decents on certain characters
-        if (c == 0 && charIndex == ('p' - 33)) {
-            chunk |= 0x40;
-        } else if (c == 5 && (charIndex == ('g' - 33) || charIndex == ('j' - 33) || charIndex == ('y' - 33))) {
-            chunk |= 0x40;          
-        } else if (c == 10 && (charIndex == ('q' - 33) || charIndex == (127 - 33))) {
-            chunk |= 0x40;          
+    for (uint8_t x = 0; x < 5; x++) {
+        uint8_t colData = 0;
+        for (uint8_t y = 0; y < 7; y++) {
+            colData |= (get_char_bit(charIndex, x, y)) << y;
         }
-        
-        display_chunk(context, chunk);
+        display_chunk(context, colData);
     }
+    
+    return 5;
 }
 
 void display_debug_int(uint8_t address, uint32_t value) {
@@ -357,7 +351,7 @@ void display_debug_char(uint8_t address, char chr) {
     DisplayContext context;
     display_begin(&context, address, 0);
 
-    display_tinyChar(&context, (uint8_t)chr);
+    display_char(&context, (uint8_t)chr);
     display_chunk(&context, 0);
 
     while (context.length != 0) {
@@ -372,7 +366,7 @@ void display_debug_text(uint8_t address, const char *text) {
     while (1) {
         uint8_t chr = (*text++);
         if (!chr) { break; }
-        display_tinyChar(&context, (uint8_t)chr);
+        display_char(&context, (uint8_t)chr);
         display_chunk(&context, 0);
     }
 
@@ -394,9 +388,9 @@ void display_debug_buffer(uint8_t address, uint8_t *value, uint16_t length) {
     display_chunks(&context, 0, 16);
 
     for (int8_t i = 0; i < length; i++) {
-        display_tinyChar(&context, getHexNibble(value[i] >> 4));
+        display_char(&context, getHexNibble(value[i] >> 4));
         display_chunk(&context, 0);
-        display_tinyChar(&context, getHexNibble(value[i]));
+        display_char(&context, getHexNibble(value[i]));
         display_chunks(&context, 0, 4);
     }
 
@@ -407,6 +401,27 @@ void display_debug_buffer(uint8_t address, uint8_t *value, uint16_t length) {
     display_chunks(&context, 0, 16);
 }
 
+uint16_t display_text(DisplayContext *context, const char *message) {
+
+    uint16_t count = 0;
+    while (*message) {
+        count += display_char(context, *message++);
+        count += display_chunk(context, 0);
+    }
+
+    while (context->length != 0) {
+        count += display_chunk(context, 0);
+    }
+
+    return count;
+}
+
+#define ALIGN_LEFT     (0)
+#define ALIGN_CENTER   (1)
+#define ALIGN_RIGHT    (2)
+uint16_t display_text(DisplayContext *context, const char *message, uint8_t x, uint8_t y, uint8_t alignment) {
+  
+}
 
 void display_qrcode(DisplayContext *context, QRCode *qrcode, uint8_t py) {
      for (uint8_t x = 0; x < 64; x++) {
@@ -572,6 +587,40 @@ static void display_transaction_ok(DisplayContext *context) {
     display_chunks(context, 0, 128 - padding);
 }
 
+void display_contract_transaction(uint8_t address, Transaction *transaction) {
+    DisplayContext context;
+    display_begin(&context, address, 0);
+
+    // @TODO Contract? High gas limit?
+    display_chunks(&context, 0, 128);
+
+    // ENS Address
+    uint8_t *ensAddress = &transaction->data[4];
+    uint8_t ensAddressLength = strlen(ensAddress);
+    
+    uint8_t length = 6 * ensAddressLength - 1;
+    Serial.println(length);
+    uint8_t padding = (128 - length) / 2;
+    display_chunks(&context, 0, padding);
+    uint16_t count = display_text(&context, (const char*)ensAddress);
+    display_chunks(&context, 0, 128 - padding - count);
+
+    display_chunks(&context, 0, 128);
+
+    // Transaction value (this has already been converted for us, to a base-10 string)
+    char* value = &transaction->data[68];
+    Serial.println(value);
+    display_transaction_value(&context, value);
+
+    // Gap
+    display_chunks(&context, 0, 128);
+
+    display_chunks(&context, 0, 128);
+
+    // "ok?"
+    display_transaction_ok(&context);
+}
+
 void display_transaction(uint8_t address, Transaction *transaction, char* value) {
     DisplayContext context;
     display_begin(&context, address, 0);
@@ -603,22 +652,6 @@ void display_transaction(uint8_t address, Transaction *transaction, char* value)
     display_transaction_ok(&context);
 }
 
-uint16_t display_text(DisplayContext *context, const char *message) {
-
-    uint16_t count = 0;
-    while (*message) {
-        display_tinyChar(context, *message++);
-        display_chunk(context, 0);
-        count += 4;
-    }
-
-    while (context->length != 0) {
-        display_chunk(context, 0);
-        count++;
-    }
-
-    return count;
-}
 
 void display_message(uint8_t address, bool binary, const uint8_t *message, uint8_t length) {
     DisplayContext context;
@@ -650,10 +683,10 @@ void display_message(uint8_t address, bool binary, const uint8_t *message, uint8
         while (1) {
             uint8_t c = (uint8_t)(message[index++]);
             if (!c) { break; }
-            display_tinyChar(&context, getHexNibble(c >> 4));
+            count += display_char(&context, getHexNibble(c >> 4));
             display_chunk(&context, 0);
-            display_tinyChar(&context, getHexNibble(c));
-            count += 7;
+            count += display_char(&context, getHexNibble(c));
+            count += 1;
             if (index % 12) {
                 display_chunks(&context, 0, 4);
                 count += 4;
